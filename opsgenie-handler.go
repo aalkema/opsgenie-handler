@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	apiKey string
-	stdin  *os.File
+	apiKey   string
+	priority string
+	stdin    *os.File
 )
 
 func main() {
@@ -38,6 +39,12 @@ func configureRootCommand() *cobra.Command {
 		"a",
 		"",
 		"The apiKey for the opsgenie integration")
+
+	cmd.Flags().StringVarP(&priority,
+		"priority",
+		"p",
+		"",
+		"The OpsGenie priority to create this alarm with, options are 1 through 5")
 
 	return cmd
 }
@@ -77,18 +84,22 @@ func sendMessage(event *types.Event) error {
 	cli := new(ogcli.OpsGenieClient)
 	cli.SetAPIKey(apiKey)
 	alertCli, _ := cli.AlertV2()
+	priorityVal, priorityErr := getPriority(priority)
+	if priorityErr != nil {
+		log.Fatal("Error:", priorityErr)
+	}
 
 	request := alertsv2.CreateAlertRequest{
-		Message:     "SDL " + event.Entity.ID + " stopped",
-		Alias:       event.Entity.ID + " stopped",
-		Description: "SDL service on " + event.Entity.ID + " is stopped",
-		Tags:        []string{"SDL"},
+		Message:     event.Check.Output + " on:" + event.Entity.ID,
+		Alias:       event.Check.Output + " on:" + event.Entity.ID,
+		Description: event.Check.Output + " on:" + event.Entity.ID,
+		Tags:        []string{"Tags"},
 		Details: map[string]string{
 			"check": event.Check.Name,
 		},
 		Entity:   event.Entity.ID,
 		Source:   "Sensu",
-		Priority: alertsv2.P3,
+		Priority: priorityVal,
 		User:     "user@opsgenie.com",
 	}
 
@@ -125,4 +136,23 @@ func validateEvent(event *types.Event) error {
 	}
 
 	return nil
+}
+
+func getPriority(priority string) (alertsv2.Priority, error) {
+	if priority == "1" {
+		return alertsv2.P1, nil
+	}
+	if priority == "2" {
+		return alertsv2.P2, nil
+	}
+	if priority == "3" {
+		return alertsv2.P3, nil
+	}
+	if priority == "4" {
+		return alertsv2.P4, nil
+	}
+	if priority == "5" {
+		return alertsv2.P5, nil
+	}
+	return alertsv2.P5, errors.New("Invalid priority passed in")
 }
